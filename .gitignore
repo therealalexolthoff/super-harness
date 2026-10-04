@@ -1,0 +1,18 @@
+.env
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+
+#Virtual Envs
+.venv/
+venv/
+env/
+
+#Editor/OS noise
+.vscode/
+.idea/
+.DS_Store
+
