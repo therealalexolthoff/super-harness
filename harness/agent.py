@@ -1,6 +1,7 @@
 import os
 from python-dotenv import load_dotenv
 from openai import OpenAI
+from system_prompt import SYSTEM_PROMPT
 
 load_dotenv()
 
@@ -24,7 +25,7 @@ def run():
     """ Run the agent's conversation loop """
     # The conversation history. This is the entire memory of the agent. 
     # Every turn, we append to it and send the whole thing to the model.
-    messages = []
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     print("Agent ready. Type 'quit' or 'exit' to leave. \n")
 
     while True:
