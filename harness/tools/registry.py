@@ -37,6 +37,44 @@ class ToolRegistry:
                     t.schema,
                 }
             }
+            for t in self._tools.values()
         ]
+    def dispatch(self, name:str, arguments: dict[str,Any]) -> str:
+        """Call the named tool with the given arguments. Returns its string output"""
+        # Reject unknown tool names - return an error the model can read and recover from
+        if name not in self._tools:
+            return f"error: unkown tool '{name}'"
 
-    
+        # Run the tool, catching any exception so a buggy call doesn't crash the loop.
+        # The model sees the error string and decides what to do next.
+        try: 
+            result = self._tools[name].function(**arguments)
+            return str(result)
+        except Exception as e:
+            return f"error: {type(e).__name__}: {e}"
+
+# The single global registry the rest of the harness imports.
+registry = ToolRegistry()
+
+def designated_tool(func: Callable) -> Callable:
+    """
+    DecoratorL register a function as a tool.
+    Reads the function's name, docstring, and type-hinted parameters to build the OpenAI tool schema. Adds it to the gloal registry.
+    """
+    # Step 1: Extract metadata from the function itself.
+    name = func.__name__
+    description = inspect.getdoc(func) or ""
+
+    # Step 2: Build a JSON schema for the function's parameters via pydantic. 
+    # TypeAdapter inspects the signature and produces an OpenAI-compatible schema.
+    schema = TypeAdapter(func).json_schema()
+
+    # Step 3: register the tool in the global registry.
+    registry.register(Tool(
+        name=name,
+        description=description,
+        function=func,
+        schema=schema
+    ))
+    # Step 4: return the function unchanged so it can still be called directly
+    return func
