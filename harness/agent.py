@@ -1,7 +1,9 @@
 import os
-from python-dotenv import load_dotenv
+from dotenv import load_dotenv
 from openai import OpenAI
-from system_prompt import SYSTEM_PROMPT
+import json
+from harness.system_prompt import SYSTEM_PROMPT
+from harness.tools.registry import registry
 
 load_dotenv()
 
@@ -47,15 +49,35 @@ def run():
         response = client.chat. completions.create(
             model=MODEL,
             messages=messages,
-            extra_body = EXTRA_BODY
+            extra_body = EXTRA_BODY,
+            tools = registry.get_schemas()
         )
-        # 5. Extract the assistant's reply
-        assistant_message = response.choices[0].message.content
+        message = response.choices[0].message
+        # If the model asks for a tool call, handle it before producing the user-facing reply. Minimum-viable dispatch: one round only.
+        if message.tool_calls:
+            # Step 1: record the model's tool-call message in history so the upcoming tool-result messages have something to reference.
+            messages.append(message)
+            # Step 2: Run each requested tool and append its result to history using the matching tool_call_id so the model can pair them up.
 
-        # 6. Append the assitant's reply to the history.
-        messages.append(assistant_message)
-
-        print(f"\n agent > {assistant_message}\n")
-
+            for call in message.tool_calls:
+                arguments = json.loads(call.function.arguments)
+                result = registry.dispatch(call.function.name, arguments)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": result,
+                })
+            # Step 3: re-call the model now that the tool results are in context. This second call produces the model's final text reply.
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=messages,
+                tools=registry.get_schemas()
+                )
+            message = response.choices[0].message
+    #  Either from the first call (no tools needed) or the second (after dispatch).
+        assistant_text = message.content
+        messages.append({"role": "assistant", "content": assistant_text})
+        print(f"\n agent > {assistant_text}\n")
+    
 if __name__ == "__main__":
     run()
