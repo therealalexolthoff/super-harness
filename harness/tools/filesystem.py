@@ -4,6 +4,7 @@
 from pathlib import Path
 from harness.tools.registry import designated_tool
 
+
 # Set the workspace directory. All filesystem tools operate inside this. 
 # We resolve it once at import to a canonical absolute path
 WORKSPACE = Path("./workspace").resolve()
