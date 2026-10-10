@@ -1,7 +1,10 @@
 import os
-from python-dotenv import load_dotenv
+from dotenv import load_dotenv
 from openai import OpenAI
-from system_prompt import SYSTEM_PROMPT
+import json
+from harness.system_prompt import SYSTEM_PROMPT
+from harness.tools.registry import registry
+
 
 load_dotenv()
 
@@ -22,40 +25,46 @@ else:
     EXTRA_BODY = {}
 
 def run():
-    """ Run the agent's conversation loop """
-    # The conversation history. This is the entire memory of the agent. 
-    # Every turn, we append to it and send the whole thing to the model.
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    print("Agent ready. Type 'quit' or 'exit' to leave. \n")
+    print("Agent ready. Type 'quit' or 'exit' to leave.\n")
 
     while True:
-        # 1. Get user input
         user_input = input("you > ").strip()
-
-        # 2. Allow the user to leave cleanly
         if user_input in {"quit", "exit"}:
             print("Goodbye!")
             break
-        #Skip empty lines without making a model call
-        elif not user_input:
+        if not user_input:
             continue
 
-        # 3. Append the user's message to the history
-        messages.append({"role":"user", "content": user_input})
+        messages.append({"role": "user", "content": user_input})
 
-        # 4. Call the model with the full conversation so far.
-        response = client.chat. completions.create(
-            model=MODEL,
-            messages=messages,
-            extra_body = EXTRA_BODY
-        )
-        # 5. Extract the assistant's reply
-        assistant_message = response.choices[0].message.content
+        # Keep calling the model until it replies without tool calls
+        while True:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=messages,
+                extra_body=EXTRA_BODY,
+                tools=registry.get_schemas(),
+            )
+            message = response.choices[0].message
+            messages.append(message)  # keeps tool_calls intact
 
-        # 6. Append the assitant's reply to the history.
-        messages.append(assistant_message)
+            if not message.tool_calls:
+                break
 
-        print(f"\n agent > {assistant_message}\n")
+            for call in message.tool_calls:
+                try:
+                    arguments = json.loads(call.function.arguments)
+                    result = registry.dispatch(call.function.name, arguments)
+                except Exception as e:
+                    result = f"Error: {e}"
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": str(result),
+                })
 
+        print(f"\nagent > {message.content}\n")
+    
 if __name__ == "__main__":
     run()

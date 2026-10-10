@@ -44,7 +44,7 @@ class ToolRegistry:
         # Reject unknown tool names - return an error the model can read and recover from
         if name not in self._tools:
             return f"error: unkown tool '{name}'"
-
+        
         # Run the tool, catching any exception so a buggy call doesn't crash the loop.
         # The model sees the error string and decides what to do next.
         try: 
